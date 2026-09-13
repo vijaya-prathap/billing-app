@@ -1,0 +1,13 @@
+# Environment variables
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Go
+bin/
+tmp/
+
+# Logs
+*.log
