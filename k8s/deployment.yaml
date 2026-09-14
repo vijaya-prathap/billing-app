@@ -20,10 +20,24 @@ spec:
     spec:
       containers:
         - name: billing-api
-          image: ghcr.io/vijaya-prathap/billing-api:latest
+          image: ghcr.io/vijaya-prathap/billing-api:sha-b58e3fc7a63000c5e3b6e8c2aec0bbd1db6a81bf
 
           ports:
             - containerPort: 8080
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
 
           env:
             - name: DB_HOST
