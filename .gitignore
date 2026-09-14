@@ -1,6 +1,7 @@
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # macOS
 .DS_Store
@@ -8,6 +9,12 @@
 # Go
 bin/
 tmp/
+coverage.out
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
 
 # Logs
 *.log
