@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: billing-api
+  namespace: billing
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: billing-api
+
+  template:
+    metadata:
+      labels:
+        app: billing-api
+
+    spec:
+      containers:
+        - name: billing-api
+          image: ghcr.io/vijaya-prathap/billing-api:latest
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: DB_HOST
+              value: host.docker.internal
+
+            - name: DB_PORT
+              value: "3306"
+
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: billing-db-secret
+                  key: DB_USER
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: billing-db-secret
+                  key: DB_PASSWORD
+
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: billing-db-secret
+                  key: DB_NAME
