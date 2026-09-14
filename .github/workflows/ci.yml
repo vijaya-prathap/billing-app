@@ -52,3 +52,6 @@ jobs:
         run: |
           docker tag billing-api:ci ghcr.io/vijaya-prathap/billing-api:latest
           docker push ghcr.io/vijaya-prathap/billing-api:latest
+
+          docker tag billing-api:ci ghcr.io/vijaya-prathap/billing-api:sha-${{ github.sha }}
+          docker push ghcr.io/vijaya-prathap/billing-api:sha-${{ github.sha }}
