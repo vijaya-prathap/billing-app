@@ -3,28 +3,30 @@ FROM golang:1.27.1-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency files first
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build Go application
-RUN go build -o billing-api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o billing-api ./cmd/api
 
 # Runtime stage
 FROM alpine:3.22
 
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S -g 10001 app \
+    && adduser -S -u 10001 -G app app
+
 WORKDIR /app
 
-# Copy compiled binary
 COPY --from=builder /app/billing-api .
 
-# Expose application port
+# Numeric UID lets Kubernetes verify runAsNonRoot without resolving /etc/passwd.
+USER 10001
+
 EXPOSE 8080
 
-# Start application
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
+
 CMD ["./billing-api"]
