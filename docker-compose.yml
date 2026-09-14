@@ -3,18 +3,61 @@ services:
     image: mysql:8.4
     container_name: billing-mysql
     restart: unless-stopped
-
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: billing_db
-      MYSQL_USER: billing_user
-      MYSQL_PASSWORD: billing_password
-
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-billing_db}
+      MYSQL_USER: ${DB_USER:-billing_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-billing_password}
     ports:
       - "3306:3306"
-
     volumes:
       - mysql_data:/var/lib/mysql
+      # Init scripts run only when the data volume is empty; use `make migrate` for existing databases.
+      - ./backend/migrations/001_create_customers.sql:/docker-entrypoint-initdb.d/001_create_customers.sql:ro
+      - ./backend/migrations/002_create_products.sql:/docker-entrypoint-initdb.d/002_create_products.sql:ro
+      - ./backend/migrations/003_create_invoices.sql:/docker-entrypoint-initdb.d/003_create_invoices.sql:ro
+      - ./backend/migrations/004_create_invoice_items.sql:/docker-entrypoint-initdb.d/004_create_invoice_items.sql:ro
+      - ./database/seed/seed.sql:/docker-entrypoint-initdb.d/900_seed.sql:ro
+    healthcheck:
+      # TCP ping fails during first-boot init (MySQL runs with networking disabled then), so healthy means fully ready.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  api:
+    build:
+      context: ./backend
+    container_name: billing-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: "8080"
+      GIN_MODE: ${GIN_MODE:-release}
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER:-billing_user}
+      DB_PASSWORD: ${DB_PASSWORD:-billing_password}
+      DB_NAME: ${DB_NAME:-billing_db}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: billing-frontend
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   mysql_data:
