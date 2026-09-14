@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -36,3 +40,15 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t billing-api:ci .
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        run: |
+          docker tag billing-api:ci ghcr.io/vijaya-prathap/billing-api:latest
+          docker push ghcr.io/vijaya-prathap/billing-api:latest
