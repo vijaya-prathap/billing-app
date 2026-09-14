@@ -1,0 +1,6 @@
+apiVersion: v2
+name: billing-app
+description: Billing API (customers, products, invoices) backed by MySQL
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

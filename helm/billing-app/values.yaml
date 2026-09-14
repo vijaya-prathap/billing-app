@@ -1,0 +1,62 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/vijaya-prathap/billing-api
+  # CD overrides this with the immutable sha-<commit> tag.
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Non-secret environment variables, rendered into a ConfigMap.
+config:
+  APP_ENV: production
+  GIN_MODE: release
+  DB_HOST: host.docker.internal
+  DB_PORT: "3306"
+  DB_MAX_OPEN_CONNS: "25"
+  DB_MAX_IDLE_CONNS: "5"
+  DB_CONN_MAX_LIFETIME: 5m
+  SERVER_SHUTDOWN_TIMEOUT: 15s
+
+# Database credentials. Prefer an existing secret managed outside the chart;
+# set create=true only with values supplied at install time (e.g. --set-string).
+secret:
+  create: false
+  existingSecret: billing-db-secret
+  data:
+    DB_USER: ""
+    DB_PASSWORD: ""
+    DB_NAME: ""
+
+terminationGracePeriodSeconds: 30
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
