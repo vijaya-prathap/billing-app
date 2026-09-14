@@ -4,62 +4,92 @@ kind: Deployment
 metadata:
   name: billing-api
   namespace: billing
+  labels:
+    app: billing-api
+    app.kubernetes.io/name: billing-api
+    app.kubernetes.io/part-of: billing-app
 
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 5
 
+  # Selector is immutable on an existing Deployment; keep it unchanged.
   selector:
     matchLabels:
       app: billing-api
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
   template:
     metadata:
       labels:
         app: billing-api
+        app.kubernetes.io/name: billing-api
+        app.kubernetes.io/part-of: billing-app
 
     spec:
+      # Longer than SERVER_SHUTDOWN_TIMEOUT so in-flight requests drain before SIGKILL.
+      terminationGracePeriodSeconds: 30
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: billing-api
           image: ghcr.io/vijaya-prathap/billing-api:sha-b58e3fc7a63000c5e3b6e8c2aec0bbd1db6a81bf
+          imagePullPolicy: IfNotPresent
 
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
 
-          readinessProbe:
+          envFrom:
+            - configMapRef:
+                name: billing-api-config
+            - secretRef:
+                name: billing-db-secret
+
+          # The API retries the DB connection for up to ~75s before listening.
+          startupProbe:
             httpGet:
               path: /health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
+              port: http
+            periodSeconds: 3
+            failureThreshold: 30
 
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
-            initialDelaySeconds: 10
+              port: http
             periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
 
-          env:
-            - name: DB_HOST
-              value: host.docker.internal
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
 
-            - name: DB_PORT
-              value: "3306"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
 
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: billing-db-secret
-                  key: DB_USER
-
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: billing-db-secret
-                  key: DB_PASSWORD
-
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: billing-db-secret
-                  key: DB_NAME
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
