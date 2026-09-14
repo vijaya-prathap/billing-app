@@ -1,88 +1,93 @@
 package main
 
 import (
-	"database/sql"
-	"log"
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
+
+	"billing-app/backend/internal/config"
+	"billing-app/backend/internal/database"
+	"billing-app/backend/internal/repository"
+	"billing-app/backend/internal/router"
+	"billing-app/backend/internal/service"
 )
 
 func main() {
-	// MySQL connection string
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
 
-	dsn := dbUser + ":" + dbPassword + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName
+	if err := run(logger); err != nil {
+		logger.Error("server exited with error", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
 
-	// Open database connection
-	db, err := sql.Open("mysql", dsn)
+func run(logger *slog.Logger) error {
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("failed to open MySQL connection:", err)
+		return err
+	}
+	gin.SetMode(cfg.GinMode)
+
+	db, err := database.NewMySQL(cfg.DB, logger)
+	if err != nil {
+		return err
 	}
 	defer db.Close()
 
-	// Verify MySQL connection
-	if err := db.Ping(); err != nil {
-		log.Fatal("failed to connect to MySQL:", err)
-	}
+	customerRepo := repository.NewCustomerRepository(db)
+	productRepo := repository.NewProductRepository(db)
+	invoiceRepo := repository.NewInvoiceRepository(db)
+	invoiceItemRepo := repository.NewInvoiceItemRepository(db)
 
-	log.Println("MySQL connected successfully!")
-
-	router := gin.Default()
-
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+	engine := router.New(router.Dependencies{
+		Logger:       logger,
+		DB:           db,
+		Customers:    service.NewCustomerService(customerRepo),
+		Products:     service.NewProductService(productRepo),
+		Invoices:     service.NewInvoiceService(invoiceRepo, customerRepo, productRepo),
+		InvoiceItems: service.NewInvoiceItemService(invoiceItemRepo, invoiceRepo, productRepo),
 	})
 
-	// Get all customers
-	router.GET("/customers", func(c *gin.Context) {
-		var customers []gin.H
-
-		rows, err := db.Query("SELECT id, name, email, created_at FROM customers")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed to fetch customers",
-			})
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var id int
-			var name string
-			var email string
-			var createdAt string
-
-			if err := rows.Scan(&id, &name, &email, &createdAt); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to read customer data",
-				})
-				return
-			}
-
-			customers = append(customers, gin.H{
-				"id":         id,
-				"name":       name,
-				"email":      email,
-				"created_at": createdAt,
-			})
-		}
-
-		c.JSON(http.StatusOK, customers)
-	})
-
-	log.Println("Server running on port 8080")
-
-	if err := router.Run(":8080"); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:              ":" + cfg.AppPort,
+		Handler:           engine,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		ReadHeaderTimeout: cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Info("http server listening", slog.String("addr", srv.Addr), slog.String("env", cfg.AppEnv))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+	}
+
+	logger.Info("shutdown signal received, draining connections", slog.String("timeout", cfg.Server.ShutdownTimeout.String()))
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return err
+	}
+	logger.Info("server stopped cleanly")
+	return nil
 }
