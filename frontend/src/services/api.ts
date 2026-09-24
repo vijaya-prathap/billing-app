@@ -1,5 +1,7 @@
 import type {
   ApiErrorBody,
+  AuthConfig,
+  AuthUser,
   CreateInvoiceInput,
   CreateInvoiceItemInput,
   Customer,
@@ -33,6 +35,11 @@ export class ApiError extends Error {
   }
 }
 
+// Fired when a protected call is answered with 401, so the app can drop back to the login screen.
+export const AUTH_EXPIRED_EVENT = "billing:auth-expired";
+// Fired on 403: the account was removed from the allowlist while signed in.
+export const AUTH_REVOKED_EVENT = "billing:auth-revoked";
+
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
@@ -48,6 +55,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body: unknown = res.status === 204 ? null : await res.json().catch(() => null);
 
   if (!res.ok) {
+    if (!path.startsWith(`${base}/auth/`)) {
+      if (res.status === 401) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      if (res.status === 403) window.dispatchEvent(new Event(AUTH_REVOKED_EVENT));
+    }
     const err = (body as ApiErrorBody | null)?.error;
     throw new ApiError(res.status, err?.message ?? `HTTP ${res.status}`, err?.request_id, err?.details ?? []);
   }
@@ -72,6 +83,14 @@ const base = "/api/v1";
 export const api = {
   health: () => request<HealthResponse>("/health"),
   ready: () => request<HealthResponse>("/ready"),
+
+  auth: {
+    // Full-page navigation target: the API redirects the browser to Google and back.
+    googleLoginUrl: `${base}/auth/google/login`,
+    config: () => request<AuthConfig>(`${base}/auth/config`),
+    me: () => request<{ user: AuthUser }>(`${base}/auth/me`),
+    logout: () => request<void>(`${base}/auth/logout`, { method: "POST" }),
+  },
 
   customers: {
     list: (page = 1, limit = 20) => request<Paginated<Customer>>(`${base}/customers${query({ page, limit })}`),

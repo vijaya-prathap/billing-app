@@ -1,8 +1,12 @@
+import { ErrorBanner } from "./components/ui";
+import { UserMenu } from "./components/UserMenu";
+import { useAuth } from "./hooks/useAuth";
 import { href, useHashRoute } from "./hooks/useHashRoute";
 import type { Route } from "./hooks/useHashRoute";
 import { CustomersPage } from "./pages/CustomersPage";
 import { InvoiceDetailPage } from "./pages/InvoiceDetailPage";
 import { InvoicesPage } from "./pages/InvoicesPage";
+import { LoginPage } from "./pages/LoginPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { StatusPage } from "./pages/StatusPage";
 
@@ -19,7 +23,34 @@ function isActive(current: Route, target: Route): boolean {
 }
 
 export default function App() {
+  const auth = useAuth();
   const route = useHashRoute();
+
+  if (auth.status === "loading") {
+    return (
+      <div className="splash" aria-busy="true">
+        <span className="muted">Loading…</span>
+      </div>
+    );
+  }
+
+  if (auth.status === "error") {
+    return (
+      <div className="splash">
+        <div className="splash-card">
+          <h2>Can't reach the billing API</h2>
+          <ErrorBanner error={auth.error} />
+          <button type="button" className="btn-primary" onClick={auth.retry}>
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth.status === "anonymous") {
+    return <LoginPage />;
+  }
 
   return (
     <>
@@ -35,6 +66,7 @@ export default function App() {
               </a>
             ))}
           </nav>
+          {auth.status === "authenticated" && <UserMenu />}
         </div>
       </header>
       <main className="page">

@@ -153,3 +153,16 @@ export interface InvoiceListFilter {
   status?: InvoiceStatus | "";
   customer_id?: number | "";
 }
+
+// Mirrors backend/internal/auth.Identity.
+export interface AuthUser {
+  uid: number;
+  sub: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export interface AuthConfig {
+  enabled: boolean;
+}
