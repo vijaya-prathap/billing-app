@@ -11,5 +11,7 @@ metadata:
 data:
   APP_PORT: {{ .Values.containerPort | quote }}
   {{- range $key, $value := .Values.config }}
+  {{- if ne (toString $value) "" }}
   {{ $key }}: {{ $value | quote }}
+  {{- end }}
   {{- end }}

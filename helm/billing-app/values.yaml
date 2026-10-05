@@ -24,9 +24,21 @@ config:
   DB_MAX_IDLE_CONNS: "5"
   DB_CONN_MAX_LIFETIME: 5m
   SERVER_SHUTDOWN_TIMEOUT: 15s
+  # Google sign-in (OAuth 2.0 authorization code flow). Neither value is secret; the client
+  # secret lives in the Secret below. GOOGLE_REDIRECT_URL must be registered in Google Cloud
+  # Console and must be the public HTTPS address of the app plus the callback path.
+  # Empty values are omitted from the ConfigMap.
+  GOOGLE_CLIENT_ID: ""
+  GOOGLE_REDIRECT_URL: ""
+  SESSION_TTL: 12h
+  # Who may sign in is the authorized_users table in MySQL, not configuration.
+  # "true" disables authentication entirely. Never set this in production.
+  AUTH_DISABLED: "false"
 
-# Database credentials. Prefer an existing secret managed outside the chart;
-# set create=true only with values supplied at install time (e.g. --set-string).
+# Database credentials plus the Google client secret and the session-signing secret.
+# Prefer an existing secret managed outside the chart; it must contain DB_USER,
+# DB_PASSWORD, DB_NAME, GOOGLE_CLIENT_SECRET and SESSION_SECRET. Set create=true only
+# with values supplied at install time (e.g. --set-string); never write them here.
 secret:
   create: false
   existingSecret: billing-db-secret
@@ -34,6 +46,9 @@ secret:
     DB_USER: ""
     DB_PASSWORD: ""
     DB_NAME: ""
+    GOOGLE_CLIENT_SECRET: ""
+    # At least 32 random characters, e.g. `openssl rand -base64 48`.
+    SESSION_SECRET: ""
 
 terminationGracePeriodSeconds: 30
 

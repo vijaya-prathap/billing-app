@@ -1,5 +1,8 @@
 -- Development seed data. Explicit IDs + INSERT IGNORE make this safe to re-run.
 -- Customer emails are unique, so a pre-existing customer with the same email is left untouched.
+--
+-- authorized_users is deliberately NOT seeded: who may sign in is per-deployment data,
+-- not something to commit. Grant access with `make authorize EMAIL=you@gmail.com`.
 
 INSERT IGNORE INTO customers (id, name, email, phone, address) VALUES
     (1001, 'Acme Corporation',    'billing@acme.example',     '+1-555-0100', '100 Industrial Way, Springfield'),

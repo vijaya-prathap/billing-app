@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 
+	"billing-app/backend/internal/auth"
 	"billing-app/backend/internal/handlers"
 	"billing-app/backend/internal/middleware"
 	"billing-app/backend/internal/service"
@@ -31,6 +32,8 @@ type Dependencies struct {
 	Products     *service.ProductService
 	Invoices     *service.InvoiceService
 	InvoiceItems *service.InvoiceItemService
+	// Auth enables Google sign-in; nil leaves every /api/v1 route open.
+	Auth *auth.Service
 }
 
 var registerTagNamesOnce sync.Once
@@ -60,8 +63,24 @@ func New(d Dependencies) *gin.Engine {
 	products := handlers.NewProductHandler(d.Products, d.Logger)
 	invoices := handlers.NewInvoiceHandler(d.Invoices, d.Logger)
 	items := handlers.NewInvoiceItemHandler(d.InvoiceItems, d.Logger)
+	authH := handlers.NewAuthHandler(d.Auth, d.Logger)
 
-	v1 := r.Group("/api/v1", middleware.Auth())
+	// Sign-in endpoints sit outside the Auth middleware; everything else requires a session.
+	var sessions *auth.SessionManager
+	var users auth.UserStore
+	r.GET("/api/v1/auth/config", authH.Config)
+	if d.Auth != nil {
+		sessions = d.Auth.Sessions
+		users = d.Auth.Users
+		r.GET("/api/v1/auth/google/login", authH.GoogleLogin)
+		r.GET("/api/v1/auth/google/callback", authH.GoogleCallback)
+		r.POST("/api/v1/auth/logout", authH.Logout)
+	}
+
+	v1 := r.Group("/api/v1", middleware.Auth(sessions, users, d.Logger))
+	if d.Auth != nil {
+		v1.GET("/auth/me", authH.Me)
+	}
 
 	v1.GET("/customers", customers.List)
 	v1.POST("/customers", customers.Create)

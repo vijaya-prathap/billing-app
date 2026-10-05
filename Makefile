@@ -15,7 +15,7 @@ MYSQL_CLIENT = $(COMPOSE) exec -T mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL
 
 .PHONY: help run build test vet fmt tidy \
 	frontend-install frontend-dev frontend-build \
-	up down logs db-up migrate seed db-shell db-reset docker-build \
+	up down logs db-up migrate seed authorize revoke authorized-users db-shell db-reset docker-build \
 	k8s-apply helm-lint helm-template helm-deploy
 
 help: ## List available targets
@@ -74,6 +74,20 @@ migrate: ## Apply all migrations to the compose MySQL (idempotent)
 
 seed: ## Load development seed data (idempotent)
 	$(MYSQL_CLIENT) < database/seed/seed.sql
+
+authorize: ## Allow a Google account to sign in: make authorize EMAIL=you@gmail.com [NAME="Your Name"]
+	@[ -n "$(EMAIL)" ] || { echo "usage: make authorize EMAIL=you@gmail.com [NAME=\"Your Name\"]"; exit 1; }
+	@printf 'INSERT INTO authorized_users (email, display_name) VALUES (LOWER(%s), %s) ON DUPLICATE KEY UPDATE is_active = 1, display_name = IF(VALUES(display_name) = "", display_name, VALUES(display_name));' \
+		"'$(EMAIL)'" "'$(NAME)'" | $(MYSQL_CLIENT)
+	@echo "authorized $(EMAIL)"
+
+revoke: ## Stop a Google account from signing in (existing sessions are cut off immediately): make revoke EMAIL=...
+	@[ -n "$(EMAIL)" ] || { echo "usage: make revoke EMAIL=you@gmail.com"; exit 1; }
+	@printf 'UPDATE authorized_users SET is_active = 0 WHERE email = LOWER(%s);' "'$(EMAIL)'" | $(MYSQL_CLIENT)
+	@echo "revoked $(EMAIL)"
+
+authorized-users: ## List authorized accounts
+	@echo 'SELECT id, email, display_name, is_active, google_sub IS NOT NULL AS linked, last_login_at FROM authorized_users ORDER BY id;' | $(MYSQL_CLIENT)
 
 db-shell: ## Open a MySQL shell
 	$(COMPOSE) exec mysql sh -c 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE"'

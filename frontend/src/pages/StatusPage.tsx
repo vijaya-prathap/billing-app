@@ -1,17 +1,24 @@
 import { StatusBadge } from "../components/StatusBadge";
+import { href } from "../hooks/useHashRoute";
+import type { Route } from "../hooks/useHashRoute";
 import { useServiceStatus } from "../hooks/useServiceStatus";
 import { formatTime } from "../utils/format";
 
-const resources = ["customers", "products", "invoices"];
+const resources: { route: Route; path: string; methods: string }[] = [
+  { route: { name: "customers" }, path: "/api/v1/customers", methods: "GET · POST · PUT · DELETE" },
+  { route: { name: "products" }, path: "/api/v1/products", methods: "GET · POST · PUT · DELETE" },
+  { route: { name: "invoices" }, path: "/api/v1/invoices", methods: "GET · POST · PUT · DELETE" },
+  { route: { name: "invoices" }, path: "/api/v1/invoices/:id/items", methods: "GET · POST · PUT · DELETE" },
+];
 
 export function StatusPage() {
   const { statuses, refresh } = useServiceStatus();
 
   return (
-    <main className="page">
+    <>
       <h1>Billing App</h1>
       <p className="muted">
-        Frontend shell. CRUD screens are not built yet; the API is fully available under <code>/api/v1</code>.
+        Manage customers, products and invoices. Every screen calls the REST API under <code>/api/v1</code>.
       </p>
 
       <section className="card">
@@ -38,12 +45,14 @@ export function StatusPage() {
       <section className="card">
         <h2>API resources</h2>
         {resources.map((r) => (
-          <div className="row" key={r}>
-            <code>/api/v1/{r}</code>
-            <span className="muted">GET · POST · PUT · DELETE</span>
+          <div className="row" key={r.path}>
+            <a href={href(r.route)}>
+              <code>{r.path}</code>
+            </a>
+            <span className="muted">{r.methods}</span>
           </div>
         ))}
       </section>
-    </main>
+    </>
   );
 }

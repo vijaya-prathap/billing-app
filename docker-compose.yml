@@ -3,11 +3,12 @@ services:
     image: mysql:8.4
     container_name: billing-mysql
     restart: unless-stopped
+    # Credentials have no defaults: they must come from .env (git-ignored, copied from .env.example).
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env (see .env.example)}
       MYSQL_DATABASE: ${DB_NAME:-billing_db}
-      MYSQL_USER: ${DB_USER:-billing_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-billing_password}
+      MYSQL_USER: ${DB_USER:?set DB_USER in .env (see .env.example)}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env (see .env.example)}
     ports:
       - "3306:3306"
     volumes:
@@ -17,6 +18,7 @@ services:
       - ./backend/migrations/002_create_products.sql:/docker-entrypoint-initdb.d/002_create_products.sql:ro
       - ./backend/migrations/003_create_invoices.sql:/docker-entrypoint-initdb.d/003_create_invoices.sql:ro
       - ./backend/migrations/004_create_invoice_items.sql:/docker-entrypoint-initdb.d/004_create_invoice_items.sql:ro
+      - ./backend/migrations/005_create_authorized_users.sql:/docker-entrypoint-initdb.d/005_create_authorized_users.sql:ro
       - ./database/seed/seed.sql:/docker-entrypoint-initdb.d/900_seed.sql:ro
     healthcheck:
       # TCP ping fails during first-boot init (MySQL runs with networking disabled then), so healthy means fully ready.
@@ -37,9 +39,17 @@ services:
       GIN_MODE: ${GIN_MODE:-release}
       DB_HOST: mysql
       DB_PORT: "3306"
-      DB_USER: ${DB_USER:-billing_user}
-      DB_PASSWORD: ${DB_PASSWORD:-billing_password}
+      DB_USER: ${DB_USER:?set DB_USER in .env (see .env.example)}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env (see .env.example)}
       DB_NAME: ${DB_NAME:-billing_db}
+      # Google sign-in; secrets come from .env (see .env.example). AUTH_DISABLED=true skips login.
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # The browser talks to the frontend container on port 3000, so the callback goes there.
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:3000/api/v1/auth/google/callback}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_TTL: ${SESSION_TTL:-12h}
     ports:
       - "8080:8080"
     depends_on:
