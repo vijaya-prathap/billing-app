@@ -24,6 +24,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
+	fmt.Println("logger initialized with oauthStateTTL:", logger)
 
 	if err := run(logger); err != nil {
 		logger.Error("server exited with error", slog.Any("error", err))
